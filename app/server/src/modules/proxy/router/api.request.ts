@@ -4,7 +4,7 @@ import { getRandomString, getURL } from "@oh/utils";
 import { Proxy } from "modules/proxy/main.ts";
 
 export const getApiRequest = {
-  method: "GET",
+  method: ["GET", "PUT"],
   pathname: "/api",
   fn: async (request: Request): Promise<Response> => {
     const { headers, method } = request;
@@ -19,10 +19,15 @@ export const getApiRequest = {
     );
 
     let data = {};
-    const { searchParams, pathname: currentPathname } = getURL(request.url);
+    const { searchParams } = getURL(request.url);
     for (const [key, value] of searchParams as any) data[key] = value;
 
-    const pathname = currentPathname.replace("/proxy", "").replace("/api", "");
+    if (request.body) {
+      data = {
+        ...(await request.json()),
+      };
+    }
+
     const eventName = user?.accountId + getRandomString(32);
 
     try {
@@ -31,9 +36,8 @@ export const getApiRequest = {
           user,
           data,
           eventName,
-          pathname,
           method,
-          url: request.url,
+          url: request.url.replace("/proxy", "").replace("/api", ""),
         });
 
         Proxy.getServerWorker().on(eventName, ({ status, data, headers }) => {

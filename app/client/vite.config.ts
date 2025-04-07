@@ -16,23 +16,25 @@ export default defineConfig({
     proxy: {
       "/data": PROXY_URL,
       "/request": PROXY_URL,
-      "/version": PROXY_URL,
-      "/config": PROXY_URL,
+      "/info": PROXY_URL,
+      "/changelog": PROXY_URL,
       "/proxy": {
         target: PROXY_URL,
         ws: true,
       },
       "/auth": PROXY_URL,
+      //
+      "/icon": PROXY_URL,
+      "/background": PROXY_URL,
     },
   },
   plugins: [tsconfigPaths(), plugin(), build()],
   publicDir: "assets/",
   build: {
-    outDir: "./build",
-    emptyOutDir: true, // also necessary
+    outDir: "../../build/client",
+    emptyOutDir: false, // also necessary
   },
   define: {
-    //@ts-ignore
-    __APP_VERSION: JSON.stringify(process.env.npm_package_version),
+    __APP_VERSION: `{ "version": "__VERSION__" }`,
   },
 });

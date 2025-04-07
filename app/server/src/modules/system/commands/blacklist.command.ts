@@ -1,5 +1,6 @@
 import {
   Command,
+  CommandRoles,
   ListActions,
   UserMutable,
   UsersConfig,
@@ -58,6 +59,9 @@ const list = (config: UsersConfig, _: string[], user: UserMutable) => {
 
 export const blacklistCommand: Command = {
   command: "blacklist",
+  role: CommandRoles.OP,
+  usages: ["<add|remove> <username>", "<on|off|list>"],
+  description: "commmands.blacklist.description",
   func: async ({ user, args }) => {
     const action = args[0] as ListActions;
     if (!action) return;

@@ -3,14 +3,13 @@ import {
   ContainerComponent,
   DisplayObjectEvent,
   EventMode,
-  global,
 } from "@tu/tulip";
 import { Event } from "shared/enums";
 import { System } from "system";
 import { messageComponent } from "./message.component";
 import { HumanMutable } from "modules/human";
 import { CHAT_BUBBLE_MESSAGE_INTERVAL, TILE_SIZE } from "shared/consts";
-import { RoomMutable } from "modules/scenes/private-room";
+import { PrivateRoomMutable, RoomMutable } from "modules/scenes/private-room";
 
 type Props = {
   room: RoomMutable;
@@ -33,74 +32,58 @@ export const bubbleChatComponent: ContainerComponent<Props, Mutable> = ({
   const jumpInterval = CHAT_BUBBLE_MESSAGE_INTERVAL;
   let timeElapsed = 0;
 
-  const removeOnMessage = System.proxy.on<any>(
-    Event.MESSAGE,
-    ({ accountId, message: text, color }) => {
-      const human = room
-        .getHumanList()
-        .find((human) => human.getUser().accountId === accountId);
-      const position = human.getPosition();
+  const onMessage = ({ accountId, message: text, color, whisper }) => {
+    const human = room
+      .getHumanList()
+      .find((human) => human.getUser().accountId === accountId);
 
-      const message = messageComponent({
-        username: human.getUser().username,
-        color,
-        message: text,
-      });
-      const messageBounds = message.getBounds();
-      const messageBoundsWidth = messageBounds.width / 2;
+    const message = messageComponent({
+      username: human.getUser().username,
+      color,
+      message: text,
+      ...(whisper ? { backgroundColor: 0xb2b2b2 } : {}),
+    });
+    const messageBounds = message.getBounds();
+    const messageBoundsWidth = messageBounds.width / 2;
 
-      message.setPivotX(messageBoundsWidth - TILE_SIZE.width / 2);
-      $container.add(message);
+    const humaPosition = human.getGlobalPosition();
 
-      jumpHeight = messageBounds.height + 2;
+    message.setPivotX(messageBoundsWidth - TILE_SIZE.width / 2);
+    $container.add(message);
 
-      let targetY = Math.round(position.y / jumpHeight) * jumpHeight;
+    jumpHeight = messageBounds.height + 2;
 
-      if (messages.length > 0) {
-        const lastMessage = messages[messages.length - 1];
-        const { y: lastMessageY } = lastMessage.getPosition();
-        targetY = Math.max(targetY, lastMessageY);
-      }
-      moveMessages();
-      //
-      let targetX = human.getGlobalPosition().x;
+    //TODO 70 is the height of the human from the middle tile position
+    let targetY = Math.round((humaPosition.y - 70) / jumpHeight) * jumpHeight;
 
-      const leftBound = $container.getPosition().x;
-      // Better to use the size of the parent Container
-      // -1 is a magic number that prevents overflowing
-      const rightBound = global.getApplication().window.getBounds().width - 1;
+    if (messages.length > 0) {
+      const lastMessage = messages[messages.length - 1];
+      const { y: lastMessageY } = lastMessage.getPosition();
+      targetY = Math.max(targetY, lastMessageY);
+    }
+    moveMessages();
 
-      const isOverflowingLeft =
-        Math.round(targetX - messageBoundsWidth + TILE_SIZE.width / 2) <
-        leftBound;
-      const isOverflowingRight =
-        Math.round(targetX + messageBoundsWidth + TILE_SIZE.width / 2) >
-        rightBound;
+    const $room =
+      System.displayObjects.getComponent<PrivateRoomMutable>("private-room");
 
-      if (isOverflowingLeft) {
-        const overflow = Math.round(
-          leftBound - (targetX - messageBoundsWidth) - TILE_SIZE.width / 2,
-        );
-        targetX += overflow;
-      }
+    const roomPosition = $room.getPosition();
 
-      if (isOverflowingRight) {
-        const overflow = Math.round(
-          targetX + messageBoundsWidth - rightBound + TILE_SIZE.width / 2,
-        );
-        targetX -= overflow;
-      }
+    message.setPosition({
+      x: humaPosition.x - roomPosition.x,
+      y: targetY,
+    });
+    messages.push(message);
+  };
 
-      message.setPosition({
-        x: targetX,
-        y: targetY,
-      });
-      messages.push(message);
-    },
+  const removeOnWhisperMessage = System.proxy.on<any>(
+    Event.WHISPER_MESSAGE,
+    (data) => onMessage({ ...data, whisper: true }),
   );
+  const removeOnMessage = System.proxy.on(Event.MESSAGE, onMessage);
 
   $container.on(DisplayObjectEvent.REMOVED, () => {
     removeOnMessage();
+    removeOnWhisperMessage();
   });
 
   const moveMessages = () => {
@@ -131,6 +114,12 @@ export const bubbleChatComponent: ContainerComponent<Props, Mutable> = ({
       }
     },
   );
+
+  let onRemoveResize;
+
+  $container.on(DisplayObjectEvent.UNMOUNT, () => {
+    onRemoveResize?.();
+  });
 
   return $container.getComponent(bubbleChatComponent);
 };

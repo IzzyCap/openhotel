@@ -8,6 +8,7 @@ import { LoadRoomEvent } from "shared/types";
 import { interfacesComponent } from "./interfaces";
 import { wait } from "shared/utils";
 import { vignetteTransitionComponent } from "modules/main";
+import { ComponentMutable } from "@tu/tulip/_dist";
 
 export const scenesComponent: ContainerComponent = () => {
   const $container = container({
@@ -28,15 +29,25 @@ export const scenesComponent: ContainerComponent = () => {
   System.proxy.on<LoadRoomEvent>(Event.LOAD_ROOM, async ({ room }) => {
     await System.game.rooms.load(room);
 
-    $container.remove($homeScene);
-    $homeScene.$destroy();
+    console.log(room);
 
-    $privateRoom = $privateRoom ?? privateRoomComponent();
-    $container.add($privateRoom);
+    switch (room.type) {
+      case "private":
+        $container.remove($homeScene);
+        $homeScene.$destroy();
 
-    System.loader.end();
-    await wait(1250);
-    $interfaces.setVisible(true);
+        $privateRoom = $privateRoom ?? privateRoomComponent();
+        $container.add($privateRoom);
+        System.displayObjects.setComponent(
+          "private-room",
+          $privateRoom as ComponentMutable,
+        );
+
+        System.loader.end();
+        await wait(1250);
+        $interfaces.setVisible(true);
+        break;
+    }
   });
 
   const $offlineScene = offlineComponent();
@@ -50,13 +61,20 @@ export const scenesComponent: ContainerComponent = () => {
   });
 
   System.proxy.on<any>(Event.LEAVE_ROOM, async ({ moveToAnotherRoom }) => {
+    const currentRoom = System.game.rooms.get();
     System.game.rooms.remove();
-    $container.remove($privateRoom);
 
-    if (!moveToAnotherRoom) {
-      $homeScene = homeComponent();
-      $container.add($homeScene);
-      $container.add(vignetteTransitionComponent());
+    switch (currentRoom.type) {
+      case "private":
+        System.displayObjects.deleteComponent("private-room");
+        $container.remove($privateRoom);
+
+        if (!moveToAnotherRoom) {
+          $homeScene = homeComponent();
+          $container.add($homeScene);
+          $container.add(vignetteTransitionComponent());
+        }
+        break;
     }
   });
 

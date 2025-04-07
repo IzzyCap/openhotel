@@ -1,4 +1,4 @@
-import { Command } from "shared/types/main.ts";
+import { Command, CommandRoles } from "shared/types/main.ts";
 import { System } from "modules/system/main.ts";
 import { FurnitureType, ProxyEvent } from "shared/enums/main.ts";
 import { __ } from "shared/utils/main.ts";
@@ -6,6 +6,9 @@ import { CrossDirection } from "@oh/utils";
 
 export const moveCommand: Command = {
   command: "move",
+  role: CommandRoles.OP,
+  usages: ["<furniture_id> <x> <z> <direction> [wallX] [wallY]"],
+  description: "command.move.description",
   func: async ({ user, args }) => {
     const [id, x, z, direction, wallX, wallY] = args as [
       string,
@@ -24,8 +27,10 @@ export const moveCommand: Command = {
     if (!roomId) return;
 
     const room = await System.game.rooms.get(roomId);
+    if (room.type !== "private") return;
+
     const furniture = room
-      .getFurnitures()
+      .getFurniture()
       .find((furniture) => furniture.id === id);
 
     if (!furniture) {

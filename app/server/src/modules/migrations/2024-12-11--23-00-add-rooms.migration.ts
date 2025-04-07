@@ -1,18 +1,16 @@
 import { Migration, DbMutable, getRandomString } from "@oh/utils";
-import { RawRoom, RoomPoint } from "shared/types/room.types.ts";
 import {
   getRoomSpawnDirection,
   getRoomSpawnPoint,
 } from "shared/utils/rooms.utils.ts";
-import { RoomPointEnum } from "shared/enums/room.enums.ts";
 
 export default {
   id: "2024-12-11--23-00-add-rooms",
   description: "Add initial rooms",
   up: async (db: DbMutable) => {
     const removeAllItems = async (id: string) => {
-      for (const { key } of await db.list({ prefix: [id] }))
-        await db.delete(key);
+      const { items } = await db.list({ prefix: [id] });
+      for (const { key } of items) await db.delete(key);
     };
 
     // Remove all previous rooms
@@ -20,12 +18,10 @@ export default {
 
     //Generate the new rooms
     for (const room of DEFAULT_ROOMS) {
-      let layout: RoomPoint[][] = room.layout.map((line) =>
+      let layout = room.layout.map((line) =>
         line
           .split("")
-          .map((value) =>
-            parseInt(value) ? parseInt(value) : (value as RoomPointEnum),
-          ),
+          .map((value) => (parseInt(value) ? parseInt(value) : value)),
       );
 
       const roomData = {
@@ -41,7 +37,7 @@ export default {
 } as Migration;
 
 const OWNER_ID = "edd8081d-d160-4bf4-b89b-133d046c87ff";
-export const DEFAULT_ROOMS: RawRoom[] = [
+export const DEFAULT_ROOMS = [
   {
     version: 1,
     id: crypto.randomUUID(),

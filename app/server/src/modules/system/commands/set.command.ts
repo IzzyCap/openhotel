@@ -1,13 +1,22 @@
-import { Command, RoomFurniture } from "shared/types/main.ts";
+import { Command, CommandRoles, RoomFurniture } from "shared/types/main.ts";
 import { ProxyEvent } from "shared/enums/event.enum.ts";
 import { System } from "modules/system/main.ts";
 import { FurnitureType } from "shared/enums/furniture.enum.ts";
 import { CrossDirection } from "@oh/utils";
 import { RoomPointEnum } from "shared/enums/room.enums.ts";
-import { isWallRenderable } from "shared/utils/rooms.utils.ts";
+import {
+  isDoorRenderable,
+  isWallRenderable,
+} from "shared/utils/rooms.utils.ts";
+import { TOP_WALL_HEIGHT, WALL_HEIGHT } from "shared/consts/wall.consts.ts";
+import { TILE_Y_HEIGHT, TILE_WIDTH } from "shared/consts/tiles.consts.ts";
+import { __ } from "shared/utils/languages.utils.ts";
 
 export const setCommand: Command = {
   command: "set",
+  role: CommandRoles.OP,
+  usages: ["<furniture_id> <x> <z> <direction> [wallX] [wallY]"],
+  description: "command.set.description",
   func: async ({ user, args }) => {
     if (3 > args.length) return;
 
@@ -39,6 +48,7 @@ export const setCommand: Command = {
     if (!roomId) return;
 
     const room = await System.game.rooms.get(roomId);
+    if (room.type !== "private") return;
 
     const furniture: RoomFurniture = {
       furnitureId,
@@ -53,23 +63,104 @@ export const setCommand: Command = {
     };
 
     const roomPoint = room.getPoint(furniture.position);
-    if (roomPoint === RoomPointEnum.EMPTY || roomPoint === RoomPointEnum.SPAWN)
+    if (
+      roomPoint === RoomPointEnum.EMPTY ||
+      roomPoint === RoomPointEnum.SPAWN
+    ) {
+      user.emit(ProxyEvent.SYSTEM_MESSAGE, {
+        message: __(user.getLanguage())(
+          "The furniture cannot be placed at position {{x}},{{z}}",
+          { x, z },
+        ),
+      });
       return;
-    if (furniture.type === FurnitureType.FRAME) {
-      const layout = room.getObject().layout;
-      if (
-        !isWallRenderable(layout, furniture.position, true) &&
-        !isWallRenderable(layout, furniture.position, false)
-      )
-        return;
     }
 
+    if (furniture.type === FurnitureType.FRAME) {
+      const layout = room.getObject().layout;
+      const isWallOrDoorX =
+        isWallRenderable(layout, furniture.position, true) ||
+        isDoorRenderable(layout, furniture.position, true);
+      const isWallOrDoorZ =
+        isWallRenderable(layout, furniture.position, false) ||
+        isDoorRenderable(layout, furniture.position, false);
+
+      if (!isWallOrDoorX && !isWallOrDoorZ) {
+        return user.emit(ProxyEvent.SYSTEM_MESSAGE, {
+          message: __(user.getLanguage())(
+            "Frames need to be attached to the wall",
+          ),
+        });
+      }
+
+      if (
+        (!isWallOrDoorZ &&
+          isWallOrDoorX &&
+          direction === CrossDirection.NORTH) ||
+        (!isWallOrDoorX && isWallOrDoorZ && direction === CrossDirection.EAST)
+      ) {
+        return user.emit(ProxyEvent.SYSTEM_MESSAGE, {
+          message: __(user.getLanguage())("Incorrect frame direction"),
+        });
+      }
+
+      // TODO: Defaults until furniture metadata is fully updated -> https://github.com/openhotel/asset-editor/issues/14
+      const frameHeight = $furniture?.size?.height || 25;
+      const frameWidth = $furniture?.size?.width || 17;
+
+      const maxX = TILE_WIDTH - Math.round(frameWidth / 2);
+      const minX = -Math.round(frameWidth / 2);
+      if (wallX > maxX)
+        return user.emit(ProxyEvent.SYSTEM_MESSAGE, {
+          message: __(user.getLanguage())(
+            "Frames cannot be placed beyond the allowed X position ({{x}})",
+            {
+              x: maxX,
+            },
+          ),
+        });
+      if (minX > wallX)
+        return user.emit(ProxyEvent.SYSTEM_MESSAGE, {
+          message: __(user.getLanguage())(
+            "Frames cannot be placed beyond the allowed X position ({{x}})",
+            {
+              x: minX,
+            },
+          ),
+        });
+
+      const previewY = -((parseInt(roomPoint + "") ?? 1) - 1);
+      const y = Math.floor(previewY);
+      const wallHeight = WALL_HEIGHT - y * TILE_Y_HEIGHT;
+      const maxY = Math.floor(
+        wallHeight - frameHeight / 2 - TOP_WALL_HEIGHT / 2,
+      );
+      const minY = Math.round(frameHeight / 2);
+
+      if (wallY > maxY)
+        return user.emit(ProxyEvent.SYSTEM_MESSAGE, {
+          message: __(user.getLanguage())(
+            "Frames cannot exceed the height of the wall ({{height}})",
+            {
+              height: maxY,
+            },
+          ),
+        });
+      if (minY > wallY)
+        return user.emit(ProxyEvent.SYSTEM_MESSAGE, {
+          message: __(user.getLanguage())(
+            "Frames cannot exceed the height of the wall ({{height}})",
+            {
+              height: minY,
+            },
+          ),
+        });
+    }
+
+    furniture.size = $furniture.size;
     switch ($furniture.type) {
       case FurnitureType.TELEPORT:
         await System.game.teleports.setRoom(furniture.id, roomId);
-        break;
-      case FurnitureType.FURNITURE:
-        furniture.size = $furniture.size;
         break;
       case FurnitureType.FRAME:
         furniture.framePosition = {
